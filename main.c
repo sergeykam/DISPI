@@ -5,7 +5,8 @@
 #include <signal.h>
 #include <sys/time.h>
 
-#include "DIS_DB.h"
+#include "dis_db.h"
+#include "dis.h"
 
 /*
  * DEFINE SECTION
@@ -58,6 +59,7 @@ typedef struct st_dis {
 //void task_init(void);
 //uint8_t task_add(mode_t state, mode_t state_next, void *handler(void));
 //void task_count(void);
+void clr_buf(void);
 
 /*
  * Обработчики сигналов
@@ -97,8 +99,16 @@ static DIS_DB_CONF config;
 status_t status = CONF;
 status_t status_next = NONE;
 static uint8_t data_buf[4];
-float data;
+union
+{
+	float data_var;
+	uint8_t data_buf[4];
+} data;
 static uint8_t timer_cnt = 1;
+
+// Инициализация матрицы датчиков
+static dis_t dis[4];
+
 //static task_t task_stack[MAX_TASKS];
 int error;
 
@@ -107,9 +117,15 @@ int main(int argc, char **argv) {
 	struct sigaction sint;
 	struct itimerval timer;
 
-	/* Инициализация базы данных и ДИС */
+	/* Инициализация базы данных */
 	if(dis_db_init()){
 		printf("Failed to connect database \n");
+		return 1;
+	}
+
+	/* Инициализация DIS */
+	if(DIS_init()){
+		printf("Failed to init DIS \n");
 		return 1;
 	}
 
@@ -130,6 +146,19 @@ int main(int argc, char **argv) {
 	timer.it_interval.tv_sec = 1;
 	timer.it_interval.tv_usec = 0;
 
+	// инициализация матрицы датчиков
+	dis[0].num = DIS1;
+	dis[0].status = DIS_STATUS_NONE;
+
+	dis[1].num = DIS2;
+	dis[1].status = DIS_STATUS_NONE;
+
+	dis[2].num = DIS3;
+	dis[2].status = DIS_STATUS_NONE;
+
+	dis[3].num = DIS4;
+	dis[3].status = DIS_STATUS_NONE;
+
 	/* Запуск таймера */
 	setitimer(ITIMER_REAL, &timer, NULL);
 
@@ -146,7 +175,6 @@ int main(int argc, char **argv) {
 
 void schedule(void){
 	if(0 == (timer_cnt % DATA_ASK_PERIOD)){
-//		task_add(DATA, mode_t state_next, void *handler(void));
 		if(IDLE == status){
 			status = DATA;
 		}
@@ -186,15 +214,23 @@ void data_cout(void){
 		printf("Asking data \n");
 		status = BUSY;
 
-		for(uint8_t i = 1; i < 5; i++){
-//			if(!DIS_getData(i, data_buf) && validate_data()){
-				data = *(float*)data_buf;
-				error = dis_db_set_data(i, data);
+		for(uint8_t i = 0; i < 1; i++){
+			printf("Asking data from %d DIS, \n", dis[i].num);
+			if(dis[i].status == DIS_STATUS_ACTIVE){
+				if(!DIS_getData(dis[i].num, data_buf) && validate_data()){
+					printf("Got data %X, %X, %X, %X, \n", data_buf[0],data_buf[1],data_buf[2],data_buf[3]);
 
-				if(error){
-					printf("Failed to set data error: %d \n", error);
+					memcpy(data.data_buf, data_buf, 4);
+					printf("Got data %f \n", data.data_var);
+					clr_buf();
+
+					error = dis_db_set_data(dis[i].num, data.data_var);
+
+					if(error){
+						printf("Failed to set data error: %d \n", error);
+					}
 				}
-//			}
+			}
 		}
 
 		status_next = IDLE;
@@ -203,25 +239,41 @@ void data_cout(void){
 
 void conf_cout(void){
 	if(CONF == status){
-		printf("Asking conf \n");
 		status = BUSY;
-		for(uint8_t i = 1; i < 5; i++){
-	//		if(!DIS_getConf(i, data_buf) && validate_conf()){
-				config.calibrated = 1;
-				config.dim = 1;
-				config.dis_num = i;
-				config.gas = 1;
-				config.sensor_type = 1;
-				config.voltage = 1;
 
-				error = dis_db_set_conf(&config);
+		for(uint8_t i = 0; i < 1; i++){
+			printf("Asking conf from %d DIS \n", dis[i].num);
 
-				if(error){
-					printf("Failed to set conf error: %d \n", error);
+			if(!DIS_getConf(dis[i].num, data_buf)){
+				printf("Got config %X, %X, %X, %X \n", data_buf[0],data_buf[1],data_buf[2],data_buf[3]);
+
+				config.dis_num = dis[i].num;
+
+				config.sensor_type = data_buf[0];
+				config.gas = data_buf[1];
+				config.dim = data_buf[2];
+				config.voltage = data_buf[3];
+
+				clr_buf();
+
+				if(validate_conf()){
+					error = dis_db_set_conf(&config);
+
+					if(error){
+						dis[i].status = DIS_STATUS_NONE;
+						dis_db_del_conf(dis[i].num);
+						printf("Failed to set conf error: %d \n", error);
+					} else {
+						dis[i].status = DIS_STATUS_ACTIVE;
+					}
+				} else {
+					printf("Not valid CONF \n");
 				}
-	//		} else {
-//				dis_db_del_conf(i);
-//			}
+			} else {
+				printf("Failed to get conf DIS #%d \n", dis[i].num);
+				dis[i].status = DIS_STATUS_NONE;
+				dis_db_del_conf(dis[i].num);
+			}
 		}
 
 		status_next = IDLE;
@@ -245,30 +297,47 @@ uint8_t validate_conf(void){
 
 	/* проверим номер датчика */
 	if((config.dis_num == 0) || (config.dis_num > 4)){
-	}
-
-	/* тип элемента */
-	if(config.sensor_type > 0x06){
+		printf("Wrong DIS num (%d) \n", config.dis_num);
 		validated = 0;
 	}
 
-	/* калибровка */
-	if((config.calibrated != 0) || (config.calibrated != 1)){
+	// check if calibrated
+	if(config.sensor_type & 0x80){
+		config.sensor_type &= 0x7F;
+		config.calibrated = 1;
+	} else {
+		config.calibrated = 0;
+	}
+
+	/* тип элемента */
+	if(++config.sensor_type > 0x06){
+		printf("Wrong sensor type  (%d) \n", config.sensor_type);
 		validated = 0;
 	}
 
 	/* тип газа */
-	if(config.gas > 0x13){
+	if(++config.gas > 0x13){
+		printf("Wrong gas (%d) \n", config.gas);
 		validated = 0;
 	}
 
 	/* размерность */
-	if(config.dim > 0x07){
+	if(++config.dim > 0x07){
+		printf("Wrong dim \n");
 		validated = 0;
 	}
 	/* питание */
-	if((config.voltage != 0x1E) || (config.voltage != 0x32)){
-		validated = 0;
+	switch (config.voltage){
+		case 0x1E:
+			config.voltage = 1;
+			break;
+		case 0x32:
+			config.voltage = 2;
+			break;
+		default:
+			printf("Wrong voltage \n");
+			validated = 0;
+			break;
 	}
 
 	return validated;
@@ -277,6 +346,18 @@ uint8_t validate_conf(void){
 void int_handler (int signum){
 	printf("Closing connection \n");
 	status = NONE;
-	dis_close_conn();
+	dis_db_close_conn();
+	DIS_close();
 	exit(1);
+}
+
+/*
+ * Очистка буфера с данными
+ */
+void clr_buf(void){
+	uint8_t i;
+
+	for(i = 0; i < 4; i++){
+		data_buf[i] = 0;
+	}
 }

@@ -13,7 +13,7 @@ EXECUTABLES :=
 
 # Every subdirectory with source files must be described here
 SUBDIRS := \
-include \
-include/API/DIS_DB \
-include/API/DIS_API \
+. \
+include/dis_db \
+include/dis \
 

@@ -4,5 +4,5 @@
 
 USER_OBJS :=
 
-LIBS := -lmysqlclient -lbcm2835
+LIBS := -lmysqlclient -lz -lstdc++ -lbcm2835
 
