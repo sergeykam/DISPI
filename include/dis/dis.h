@@ -57,9 +57,9 @@
  * ATT_A5	- attempts to get ready state from DIS
 */
 
-#define ATT_TOTAL 	150 // Всего попыток
+#define ATT_TOTAL 	100 // Всего попыток
 #define ATT_A5 		20 // Попыток получить А5
-#define ATT_GOT_A5	5 // Сколько раз видим А5 перед считыванием данных
+#define ATT_GOT_A5	10 // Сколько раз видим А5 перед считыванием данных
 
 /*
  * VARIABLES

@@ -13,11 +13,13 @@
  */
 #define CONF_ASK_PERIOD 55
 #define DATA_ASK_PERIOD 10
-#define TIMER_MAX_TICK	60
-#define MAX_TASKS		20
-#define SUSPEND_ATTEMPTS		20
 
-#define MAX(x,y) (x > y)? x : y
+#define TIMER_MAX_TICK	60
+//#define MAX_TASKS		20
+
+//#define SUSPEND_ATTEMPTS		20
+
+//#define MAX(x,y) (x > y)? x : y
 
 /*
  * Статус датчика
@@ -217,17 +219,21 @@ void data_cout(void){
 		for(uint8_t i = 0; i < 1; i++){
 			printf("Asking data from %d DIS, \n", dis[i].num);
 			if(dis[i].status == DIS_STATUS_ACTIVE){
-				if(!DIS_getData(dis[i].num, data_buf) && validate_data()){
+				if(!DIS_getData(dis[i].num, data_buf)){
 					printf("Got data %X, %X, %X, %X, \n", data_buf[0],data_buf[1],data_buf[2],data_buf[3]);
-
 					memcpy(data.data_buf, data_buf, 4);
-					printf("Got data %f \n", data.data_var);
-					clr_buf();
 
-					error = dis_db_set_data(dis[i].num, data.data_var);
+					if(validate_data()){
+						printf("Got data %f \n", data.data_var);
+						clr_buf();
 
-					if(error){
-						printf("Failed to set data error: %d \n", error);
+						error = dis_db_set_data(dis[i].num, data.data_var);
+
+						if(error){
+							printf("Failed to set data error: %d \n", error);
+						}
+					} else {
+						printf("Data is not valid \n");
 					}
 				}
 			}
@@ -286,6 +292,11 @@ void conf_cout(void){
 uint8_t validate_data(void){
 	uint8_t validated = 1;
 
+	if(data.data_var < 0){
+		validated = 0;
+		printf("Data not validated %f \n", data.data_var);
+	}
+
 	return validated;
 }
 
@@ -297,7 +308,7 @@ uint8_t validate_conf(void){
 
 	/* проверим номер датчика */
 	if((config.dis_num == 0) || (config.dis_num > 4)){
-		printf("Wrong DIS num (%d) \n", config.dis_num);
+//		printf("Wrong DIS num (%d) \n", config.dis_num);
 		validated = 0;
 	}
 
@@ -311,19 +322,19 @@ uint8_t validate_conf(void){
 
 	/* тип элемента */
 	if(++config.sensor_type > 0x06){
-		printf("Wrong sensor type  (%d) \n", config.sensor_type);
+//		printf("Wrong sensor type  (%d) \n", config.sensor_type);
 		validated = 0;
 	}
 
 	/* тип газа */
 	if(++config.gas > 0x13){
-		printf("Wrong gas (%d) \n", config.gas);
+//		printf("Wrong gas (%d) \n", config.gas);
 		validated = 0;
 	}
 
 	/* размерность */
 	if(++config.dim > 0x07){
-		printf("Wrong dim \n");
+//		printf("Wrong dim \n");
 		validated = 0;
 	}
 	/* питание */
@@ -335,7 +346,7 @@ uint8_t validate_conf(void){
 			config.voltage = 2;
 			break;
 		default:
-			printf("Wrong voltage \n");
+//			printf("Wrong voltage \n");
 			validated = 0;
 			break;
 	}

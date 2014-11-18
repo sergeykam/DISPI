@@ -35,15 +35,15 @@ union write_packet_union {
 
 } write_packet;
 
-static char read_tmp_buf[7];
-static char dummy_byte = 0x55;
-static char tmp = 0x55;
-static uint8_t success = 0;
+//static char read_tmp_buf[7];
+//static char dummy_byte = 0x55;
+//static char tmp = 0x55;
+//static uint8_t success = 0;
 static uint8_t * usr_data_buf_ptr;
 
-uint8_t curr_total_att = ATT_TOTAL;
-uint8_t curr_a5_att = ATT_A5;
-uint8_t curr_got_a5_att = ATT_GOT_A5;
+//uint8_t curr_total_att = ATT_TOTAL;
+//uint8_t curr_a5_att = ATT_A5;
+//uint8_t curr_got_a5_att = ATT_GOT_A5;
 
 // ********************************************************
 
@@ -109,6 +109,15 @@ void chipSelect(uint8_t DIS_num) {
 // ********************************************************
 
 int get(uint8_t DIS_num, uint8_t cmd) {
+	uint8_t curr_total_att = ATT_TOTAL;
+	uint8_t curr_a5_att = ATT_A5;
+	uint8_t curr_got_a5_att = ATT_GOT_A5;
+
+	char read_tmp_buf[7];
+	char dummy_byte = 0x55;
+	char tmp = 0x55;
+	uint8_t success = 0;
+
 	// Стандартный стартовый байт
 	write_packet.write_pos.start_byte = 0xAA;
 
@@ -125,10 +134,12 @@ int get(uint8_t DIS_num, uint8_t cmd) {
 	// Начинаем пробовать получить 0хА5
 	while (curr_total_att) {
 		curr_total_att--;
-
+//		printf("Chip select... \n");
 		chipSelect(DIS_num);
+//		printf("Done Chip select... \n");
 
 		bcm2835_spi_transfernb((char*) write_packet.write_frame, read_tmp_buf, 7);
+//		printf("Transferred cmd... \n");
 
 		// ждем получения 0хА5
 		while (curr_a5_att) {
@@ -144,6 +155,7 @@ int get(uint8_t DIS_num, uint8_t cmd) {
 
 		// если был получен А5
 		if (tmp == 0xA5) {
+//			printf("Got 0xA5 \n");
 			// ждем пока пройдут все A5
 			while (((tmp == 0xA5) || (tmp == 0x55)) && curr_got_a5_att) {
 				curr_got_a5_att--;
@@ -151,6 +163,7 @@ int get(uint8_t DIS_num, uint8_t cmd) {
 			}
 			// получаем сами данные
 			if (curr_got_a5_att) {
+//				printf("Got data \n");
 				bcm2835_spi_transfernb(&dummy_byte, (char*) read_packet.read_frame, 5);
 
 				success = 1;
@@ -173,6 +186,7 @@ int get(uint8_t DIS_num, uint8_t cmd) {
 		}
 		return 0;
 	} else {
+		printf("Failed to get \n");
 		return 1;
 	}
 }
@@ -187,6 +201,8 @@ int DIS_getData(uint8_t DIS_num, uint8_t* Rx_buf) {
 
 int DIS_getConf(uint8_t DIS_num, uint8_t* Rx_buf) {
 	usr_data_buf_ptr = Rx_buf;
+
+//	printf("DIS_get_conf %d \n", DIS_num);
 
 	return get(DIS_num, CMD_CONF);
 }
